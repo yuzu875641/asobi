@@ -9,7 +9,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// `public` ディレクトリ内の静的ファイル（CSS、JSなど）を配信
+// `public` ディレクトリ内の静的ファイルを配信
 app.use(express.static(path.join(__dirname, 'public')));
 
 // クライアントからの接続イベントを監視
@@ -20,13 +20,31 @@ io.on('connection', (socket) => {
   socket.on('join room', (room) => {
     socket.join(room);
     console.log(`デバイスがルーム「${room}」に参加しました`);
+    // ルームに参加したことを他のユーザーに通知
+    socket.to(room).emit('user joined', { id: socket.id });
   });
 
-  // クライアントがコマンドを送信したとき
+  // 連携操作用のコマンドを受信したとき
   socket.on('send command', (data) => {
     // 同じルーム内の他のクライアントにコマンドを送信
     socket.to(data.room).emit('receive command', data.command);
     console.log(`ルーム「${data.room}」にコマンド「${data.command}」を送信しました`);
+  });
+
+  // WebRTCのシグナリング関連イベント
+  // オファーを受信し、同じルーム内の他のクライアントに転送
+  socket.on('send offer', (data) => {
+    socket.to(data.room).emit('receive offer', { offer: data.offer });
+  });
+
+  // アンサーを受信し、同じルーム内の他のクライアントに転送
+  socket.on('send answer', (data) => {
+    socket.to(data.room).emit('receive answer', { answer: data.answer });
+  });
+
+  // ICE候補を受信し、同じルーム内の他のクライアントに転送
+  socket.on('send candidate', (data) => {
+    socket.to(data.room).emit('receive candidate', { candidate: data.candidate });
   });
 
   // クライアントが切断したとき
