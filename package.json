@@ -1,7 +1,7 @@
 {
   "name": "device-sync-app",
   "version": "1.0.0",
-  "description": "A web app for synchronizing devices using Node.js and Socket.io",
+  "description": "A web app for synchronizing devices with a video call feature.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
