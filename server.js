@@ -3,7 +3,14 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 
-// Vercelでの静的ファイル配信
+const path = require('path'); // pathモジュールを追加
+
+// ルートパスへのアクセス時にpublic/index.htmlを返す
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 静的ファイルを配信する（これまでのコードから変更なし）
 app.use(express.static('public'));
 
 // 新しいクライアントが接続したときの処理
