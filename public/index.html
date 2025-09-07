@@ -2,36 +2,47 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>デバイス連携デモ</title>
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 50px; }
-        button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
-        #room-section { margin-bottom: 20px; }
+        body { font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1 { color: #007bff; }
+        input[type="text"] { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; width: calc(100% - 120px); margin-right: 10px; }
+        button { padding: 10px 20px; font-size: 16px; border: none; border-radius: 4px; color: #fff; background-color: #007bff; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #0056b3; }
+        #control-section { margin-top: 20px; }
+        #status { margin-top: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>デバイス連携デモ</h1>
+    <div class="container">
+        <h1>デバイス連携デモ</h1>
 
-    <div id="room-section">
-        <input type="text" id="room-id" placeholder="ルームIDを入力" required>
-        <button id="join-button">ルームに参加</button>
+        <div id="room-section">
+            <input type="text" id="room-id" placeholder="ルームIDを入力" required>
+            <button id="join-button">ルームに参加</button>
+        </div>
+
+        <div id="control-section" style="display: none;">
+            <h2>操作パネル</h2>
+            <p>他のデバイスと連携しています。</p>
+            <button id="command-up">上に移動</button>
+            <button id="command-down">下に移動</button>
+        </div>
+
+        <div id="status"></div>
     </div>
-
-    <div id="control-section" style="display: none;">
-        <h2>操作パネル</h2>
-        <p>他のデバイスと連携しています。</p>
-        <button id="command-up">上に移動</button>
-        <button id="command-down">下に移動</button>
-    </div>
-
-    <div id="status"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        // Socket.ioのクライアントインスタンスを作成
+        // URLを指定しないことで、デプロイされた環境のホストに自動接続
         const socket = io();
         let currentRoom = null;
 
+        // DOM要素の取得
         const roomIdInput = document.getElementById('room-id');
         const joinButton = document.getElementById('join-button');
         const commandUpButton = document.getElementById('command-up');
@@ -40,11 +51,15 @@
         const roomSection = document.getElementById('room-section');
         const controlSection = document.getElementById('control-section');
 
+        // 「ルームに参加」ボタンのクリックイベント
         joinButton.addEventListener('click', () => {
             const roomId = roomIdInput.value.trim();
             if (roomId) {
+                // サーバーに「join room」イベントとルームIDを送信
                 socket.emit('join room', roomId);
                 currentRoom = roomId;
+
+                // UIの切り替え
                 statusDiv.innerText = `ルーム「${roomId}」に参加しました。`;
                 roomSection.style.display = 'none';
                 controlSection.style.display = 'block';
@@ -53,18 +68,27 @@
             }
         });
 
-        // コマンド送信
+        // 「上に移動」ボタンのクリックイベント
         commandUpButton.addEventListener('click', () => {
-            socket.emit('send command', { room: currentRoom, command: 'up' });
-        });
-        commandDownButton.addEventListener('click', () => {
-            socket.emit('send command', { room: currentRoom, command: 'down' });
+            if (currentRoom) {
+                // サーバーに「send command」イベントとコマンドデータを送信
+                socket.emit('send command', { room: currentRoom, command: 'up' });
+            }
         });
 
-        // 他のデバイスからのコマンドを受信
+        // 「下に移動」ボタンのクリックイベント
+        commandDownButton.addEventListener('click', () => {
+            if (currentRoom) {
+                // サーバーに「send command」イベントとコマンドデータを送信
+                socket.emit('send command', { room: currentRoom, command: 'down' });
+            }
+        });
+
+        // サーバーから「receive command」イベントを受信したときの処理
         socket.on('receive command', (command) => {
-            alert(`コマンドを受信しました: 「${command}」`);
-            // ここに、受信したコマンドに応じた処理を記述
+            // 他のデバイスからのコマンドを受信し、アラートで表示
+            alert(`他のデバイスからコマンドを受信しました: 「${command}」`);
+            // ここに、受信したコマンドに応じた処理（例：画面の要素を動かすなど）を記述
         });
     </script>
 
