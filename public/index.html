@@ -68,14 +68,12 @@
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
             let deviceId = null;
-
-            // facingModeに応じてデバイスを検索
             if (facingMode === 'environment') {
                 const backCamera = videoDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear'));
                 if (backCamera) {
                     deviceId = backCamera.deviceId;
                 }
-            } else { // デフォルトは 'user'（内カメ）
+            } else {
                 const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front'));
                 if (frontCamera) {
                     deviceId = frontCamera.deviceId;
@@ -94,18 +92,17 @@
         joinButton.addEventListener('click', async () => {
             const roomId = roomIdInput.value.trim();
             if (roomId) {
-                socket.emit('join room', roomId);
                 currentRoom = roomId;
-
-                statusDiv.innerText = `ルーム「${roomId}」に参加しました。`;
+                statusDiv.innerText = `ルーム「${roomId}」に参加しています...`;
                 roomSection.style.display = 'none';
                 controlSection.style.display = 'block';
                 videoSection.style.display = 'block';
 
                 try {
-                    localStream = await getCameraStream('environment'); // 外カメを優先
+                    localStream = await getCameraStream('environment');
                     localVideo.srcObject = localStream;
                     initPeerConnection();
+                    socket.emit('join room', roomId); // socket.emitをtryブロックの後に移動
                 } catch (e) {
                     console.error('カメラやマイクへのアクセスに失敗しました。', e);
                     alert('カメラやマイクへのアクセス許可が必要です。');
@@ -162,10 +159,15 @@
 
         socket.on('user joined', async (data) => {
             if (data.id !== socket.id) {
+                // 新しいユーザーが参加したらofferを送信
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 socket.emit('send offer', { room: currentRoom, offer: peerConnection.localDescription });
             }
+        });
+        
+        socket.on('connect', () => {
+          console.log("Socket.io接続済み");
         });
 
         // コマンド連携イベント
