@@ -62,6 +62,34 @@
         const localVideo = document.getElementById('local-video');
         const remoteVideo = document.getElementById('remote-video');
 
+        // カメラとマイクのストリームを取得
+        async function getCameraStream(facingMode) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+            let deviceId = null;
+
+            // facingModeに応じてデバイスを検索
+            if (facingMode === 'environment') {
+                const backCamera = videoDevices.find(device => device.label.toLowerCase().includes('back') || device.label.toLowerCase().includes('rear'));
+                if (backCamera) {
+                    deviceId = backCamera.deviceId;
+                }
+            } else { // デフォルトは 'user'（内カメ）
+                const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front'));
+                if (frontCamera) {
+                    deviceId = frontCamera.deviceId;
+                }
+            }
+
+            const constraints = {
+                video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: facingMode },
+                audio: true
+            };
+
+            return navigator.mediaDevices.getUserMedia(constraints);
+        }
+
         // 「ルームに参加」ボタンのクリックイベント
         joinButton.addEventListener('click', async () => {
             const roomId = roomIdInput.value.trim();
@@ -74,9 +102,8 @@
                 controlSection.style.display = 'block';
                 videoSection.style.display = 'block';
 
-                // カメラとマイクのストリームを取得
                 try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    localStream = await getCameraStream('environment'); // 外カメを優先
                     localVideo.srcObject = localStream;
                     initPeerConnection();
                 } catch (e) {
@@ -90,23 +117,19 @@
 
         // WebRTCピア接続の初期化
         function initPeerConnection() {
-            // ICEサーバーの設定（Googleのパブリックサーバーを使用）
             const configuration = { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] };
             peerConnection = new RTCPeerConnection(configuration);
 
-            // 自分のストリームをPeerConnectionに追加
             localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, localStream);
             });
 
-            // 相手のストリームが追加されたときのイベント
             peerConnection.ontrack = (event) => {
                 if (remoteVideo.srcObject !== event.streams[0]) {
                     remoteVideo.srcObject = event.streams[0];
                 }
             };
 
-            // ICE候補が生成されたときのイベント
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
                     socket.emit('send candidate', { room: currentRoom, candidate: event.candidate });
