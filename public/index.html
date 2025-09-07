@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>デバイス連携デモ</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 50px; }
+        button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
+        #room-section { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <h1>デバイス連携デモ</h1>
+
+    <div id="room-section">
+        <input type="text" id="room-id" placeholder="ルームIDを入力" required>
+        <button id="join-button">ルームに参加</button>
+    </div>
+
+    <div id="control-section" style="display: none;">
+        <h2>操作パネル</h2>
+        <p>他のデバイスと連携しています。</p>
+        <button id="command-up">上に移動</button>
+        <button id="command-down">下に移動</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentRoom = null;
+
+        const roomIdInput = document.getElementById('room-id');
+        const joinButton = document.getElementById('join-button');
+        const commandUpButton = document.getElementById('command-up');
+        const commandDownButton = document.getElementById('command-down');
+        const statusDiv = document.getElementById('status');
+        const roomSection = document.getElementById('room-section');
+        const controlSection = document.getElementById('control-section');
+
+        joinButton.addEventListener('click', () => {
+            const roomId = roomIdInput.value.trim();
+            if (roomId) {
+                socket.emit('join room', roomId);
+                currentRoom = roomId;
+                statusDiv.innerText = `ルーム「${roomId}」に参加しました。`;
+                roomSection.style.display = 'none';
+                controlSection.style.display = 'block';
+            } else {
+                alert('ルームIDを入力してください。');
+            }
+        });
+
+        // コマンド送信
+        commandUpButton.addEventListener('click', () => {
+            socket.emit('send command', { room: currentRoom, command: 'up' });
+        });
+        commandDownButton.addEventListener('click', () => {
+            socket.emit('send command', { room: currentRoom, command: 'down' });
+        });
+
+        // 他のデバイスからのコマンドを受信
+        socket.on('receive command', (command) => {
+            alert(`コマンドを受信しました: 「${command}」`);
+            // ここに、受信したコマンドに応じた処理を記述
+        });
+    </script>
+
+</body>
+</html>
