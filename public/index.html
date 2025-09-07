@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>デバイス連携デモ</title>
+    <title>デバイス連携・カメラ通話デモ</title>
     <style>
         body { font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
@@ -11,14 +11,15 @@
         input[type="text"] { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; width: calc(100% - 120px); margin-right: 10px; }
         button { padding: 10px 20px; font-size: 16px; border: none; border-radius: 4px; color: #fff; background-color: #007bff; cursor: pointer; transition: background-color 0.3s; }
         button:hover { background-color: #0056b3; }
-        #control-section { margin-top: 20px; }
+        #control-section, #video-section { margin-top: 20px; }
         #status { margin-top: 20px; font-weight: bold; }
+        video { width: 45%; margin: 5px; border: 1px solid #ccc; background-color: #000; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>デバイス連携デモ</h1>
+        <h1>デバイス連携・カメラ通話デモ</h1>
 
         <div id="room-section">
             <input type="text" id="room-id" placeholder="ルームIDを入力" required>
@@ -32,16 +33,24 @@
             <button id="command-down">下に移動</button>
         </div>
 
+        <div id="video-section" style="display: none;">
+            <h2>カメラ通話</h2>
+            <video id="local-video" autoplay muted></video>
+            <video id="remote-video" autoplay></video>
+        </div>
+
         <div id="status"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Socket.ioのクライアントインスタンスを作成
+        // Socket.ioのクライアントインスタンス
         const socket = io();
         let currentRoom = null;
+        let localStream;
+        let peerConnection;
 
-        // DOM要素の取得
+        // DOM要素
         const roomIdInput = document.getElementById('room-id');
         const joinButton = document.getElementById('join-button');
         const commandUpButton = document.getElementById('command-up');
@@ -49,43 +58,107 @@
         const statusDiv = document.getElementById('status');
         const roomSection = document.getElementById('room-section');
         const controlSection = document.getElementById('control-section');
+        const videoSection = document.getElementById('video-section');
+        const localVideo = document.getElementById('local-video');
+        const remoteVideo = document.getElementById('remote-video');
 
         // 「ルームに参加」ボタンのクリックイベント
-        joinButton.addEventListener('click', () => {
+        joinButton.addEventListener('click', async () => {
             const roomId = roomIdInput.value.trim();
             if (roomId) {
-                // サーバーに「join room」イベントとルームIDを送信
                 socket.emit('join room', roomId);
                 currentRoom = roomId;
 
-                // UIの切り替え
                 statusDiv.innerText = `ルーム「${roomId}」に参加しました。`;
                 roomSection.style.display = 'none';
                 controlSection.style.display = 'block';
+                videoSection.style.display = 'block';
+
+                // カメラとマイクのストリームを取得
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    localVideo.srcObject = localStream;
+                    initPeerConnection();
+                } catch (e) {
+                    console.error('カメラやマイクへのアクセスに失敗しました。', e);
+                    alert('カメラやマイクへのアクセス許可が必要です。');
+                }
             } else {
                 alert('ルームIDを入力してください。');
             }
         });
 
-        // 「上に移動」ボタンのクリックイベント
+        // WebRTCピア接続の初期化
+        function initPeerConnection() {
+            // ICEサーバーの設定（Googleのパブリックサーバーを使用）
+            const configuration = { 'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }] };
+            peerConnection = new RTCPeerConnection(configuration);
+
+            // 自分のストリームをPeerConnectionに追加
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // 相手のストリームが追加されたときのイベント
+            peerConnection.ontrack = (event) => {
+                if (remoteVideo.srcObject !== event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                }
+            };
+
+            // ICE候補が生成されたときのイベント
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('send candidate', { room: currentRoom, candidate: event.candidate });
+                }
+            };
+        }
+
+        // WebRTCシグナリングイベントのハンドラー
+        socket.on('receive candidate', async (data) => {
+            try {
+                await peerConnection.addIceCandidate(data.candidate);
+            } catch (e) {
+                console.error('Error adding received ice candidate', e);
+            }
+        });
+
+        socket.on('receive offer', async (data) => {
+            if (!peerConnection) {
+                initPeerConnection();
+            }
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('send answer', { room: currentRoom, answer: peerConnection.localDescription });
+        });
+
+        socket.on('receive answer', async (data) => {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        });
+
+        socket.on('user joined', async (data) => {
+            if (data.id !== socket.id) {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('send offer', { room: currentRoom, offer: peerConnection.localDescription });
+            }
+        });
+
+        // コマンド連携イベント
         commandUpButton.addEventListener('click', () => {
             if (currentRoom) {
-                // サーバーに「send command」イベントとコマンドデータを送信
                 socket.emit('send command', { room: currentRoom, command: 'up' });
             }
         });
 
-        // 「下に移動」ボタンのクリックイベント
         commandDownButton.addEventListener('click', () => {
             if (currentRoom) {
-                // サーバーに「send command」イベントとコマンドデータを送信
                 socket.emit('send command', { room: currentRoom, command: 'down' });
             }
         });
 
-        // サーバーから「receive command」イベントを受信したときの処理
         socket.on('receive command', (command) => {
-            // 他のデバイスからのコマンドを受信し、アラートで表示
             alert(`他のデバイスからコマンドを受信しました: 「${command}」`);
         });
     </script>
