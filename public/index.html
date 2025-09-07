@@ -38,7 +38,6 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         // Socket.ioのクライアントインスタンスを作成
-        // URLを指定しないことで、デプロイされた環境のホストに自動接続
         const socket = io();
         let currentRoom = null;
 
@@ -88,7 +87,6 @@
         socket.on('receive command', (command) => {
             // 他のデバイスからのコマンドを受信し、アラートで表示
             alert(`他のデバイスからコマンドを受信しました: 「${command}」`);
-            // ここに、受信したコマンドに応じた処理（例：画面の要素を動かすなど）を記述
         });
     </script>
 
